@@ -8,37 +8,122 @@ namespace Bot.NET
 {
     class Conversacion
     {
-        public string Usuario;
+        public string KeyUsuario = "$nombre";
+        public static string Usuario;
         public string Bot = "Loli";
         public Dictionary<string, List<string>> QandA;
         public Dictionary<string, List<string>> Saludos;
+        public Dictionary<string, List<string>> Tematicas;
+        public Dictionary<string, List<string>> Nombre;
+        public List<string> Error;
+        public List<string> Aleatorios;
+        public bool CargaFinalizada = false;
 
-        public Conversacion(string user)
+        public Conversacion(string pathDialogos, string pathSaludos, string pathTematicas, string pathNombre, string pathError, string pathAleatorio)
         {
-            Usuario = user;
-            QandA = GestorGuion.CargarCSV("./dialogos.csv");
-            Saludos = GestorGuion.CargarCSV("./saludos.csv");
+            CargarArchivos(pathDialogos, pathSaludos, pathTematicas, pathNombre, pathError, pathAleatorio);
+        }
+        public async void CargarArchivos(string pathDialogos, string pathSaludos, string pathTematicas, string pathNombre, string pathError, string pathAleatorio)
+        {
+            Saludos = GestorGuion.CargarDiccionarioCsvSync(pathSaludos);
+            Nombre = await GestorGuion.CargarDiccionarioCSV(pathNombre);
+            QandA = await GestorGuion.CargarDiccionarioCSV(pathDialogos);
+            Tematicas = await GestorGuion.CargarDiccionarioCSV(pathTematicas);
+            Error = await GestorGuion.CargarTxt(pathError);
+            Aleatorios = await GestorGuion.CargarTxt(pathAleatorio);
+            CargaFinalizada = true;
         }
 
         public string Responder(string pregunta)
         {
             try
             {
-                Random random = new Random();
-                return QandA[pregunta][random.Next(QandA[pregunta].Count)];
+                try
+                {
+                    return QandA[pregunta][new Random().Next(QandA[pregunta].Count)];
+                }
+                catch
+                {
+                    foreach(KeyValuePair<string, List<string>> elemento in Tematicas)
+                    {
+                        if (pregunta.Contains(elemento.Key))
+                        {
+                            return elemento.Value[new Random().Next(elemento.Value.Count)];
+                        }
+                    }
+                    throw new Exception();
+                }
             }
             catch
             {
-                return "Non sei";
+                return Error[new Random().Next(0, Error.Count)];
             }
+        }
+        public string Aleatorio()
+        {
+            return Aleatorios[new Random().Next(0, Aleatorios.Count)];
         }
 
         public string Saludo()
         {
-            string momentoDia = "mañana";
-            if (DateTime.Now.Hour >= 12 && DateTime.Now.Hour < 16) momentoDia = "mediodia";
-            if (DateTime.Now.Hour >= 6 && DateTime.Now.Hour < 12) momentoDia = "mañana";
-            if (DateTime.Now.Hour >= 20 && DateTime.Now.Hour < 24) momentoDia = "mañana";
+            string momentoDia;
+            if (DateTime.Now.Hour >= 12 && DateTime.Now.Hour < 16) momentoDia = "$mediodia";
+            else if (DateTime.Now.Hour >= 6 && DateTime.Now.Hour < 12) momentoDia = "$mañana";
+            else if (DateTime.Now.Hour >= 16 && DateTime.Now.Hour < 20) momentoDia = "$tarde";
+            else momentoDia = "$noche";
+            Random random = new Random();
+            momentoDia = "$mañana";
+            return Saludos[momentoDia][random.Next(Saludos[momentoDia].Count)];
+        }
+        public async Task<string> PreguntarNombre()
+        {
+            while(Nombre == null)
+            {
+                await Task.Yield();
+            }
+            return Nombre["$preg_nombre"][new Random().Next(0, Nombre["$preg_nombre"].Count)];
+        }
+        private async void ReemplazarNombre()
+        {
+            await Task.Yield();
+            Tematicas = await _reemplazarNombre(Tematicas);
+            QandA = await _reemplazarNombre(QandA);
+            Saludos = await _reemplazarNombre(Saludos);
+            Nombre = await _reemplazarNombre(Nombre);
+        }
+
+        private async Task<Dictionary<string, List<string>>> _reemplazarNombre(Dictionary<string, List<string>> diccionario)
+        {
+            await Task.Yield();
+            Dictionary<string, List<string>> resultado = new Dictionary<string, List<string>>();
+
+            foreach (KeyValuePair<string, List<string>> elemento in diccionario)
+            {
+                string[] valores = elemento.Value.ToArray();
+                for(int i = 0; i<valores.Length; i++)
+                {
+                    valores[i] = valores[i].Replace(KeyUsuario, Usuario);
+                }
+                resultado.Add(elemento.Key, valores.ToList());
+            }
+            return resultado;
+        }
+        public string AsignarNombre(string nombre)
+        {
+            nombre = Texto.FormatearTexto(nombre);
+            nombre = nombre.Replace("me llamo ", "").Replace("soy ", "");
+            var letras = nombre.ToCharArray();
+            letras[0] = letras[0].ToString().ToUpper().ToCharArray()[0];
+            nombre = new string(letras);
+            Usuario = nombre;
+
+            foreach(KeyValuePair<string,List<string>> s in Nombre)
+            {
+                Console.WriteLine($"Nombre[{s.Key}]");
+            }
+
+            ReemplazarNombre();
+            return Nombre["$res_nombre"][new Random().Next(Nombre["$res_nombre"].Count)];
         }
 
     }
