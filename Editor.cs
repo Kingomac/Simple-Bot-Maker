@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Net;
 
 namespace Bot.NET
 {
@@ -33,29 +34,33 @@ namespace Bot.NET
         }
         private void CloseButton_Click(object sender, EventArgs e)
         {
+            configEditor.Guardar();
             this.Close();
         }
         #endregion
 
         private Dictionary<string, string[]> temporal = new Dictionary<string, string[]>();
-        private string[] idTemporal = new string[] { "tematicas", "dialogos", "nombre", "saludos", "error", "aleatorio" };
         public string anteriorSeleccion;
         public Timer highlightTimer = new Timer();
-        private ConfigEditor configEditor = new ConfigEditor();
+        private ConfigEditor configEditor;
 
         public Editor()
         {
+            
             InitializeComponent();
+            
             CargarSeleccionBots();
             CargarSeleccionArchivos();
             ResetTemporal();
             LoadFontsList();
             CargarConfig();
-
-            //Set highlightTimer
-            highlightTimer.Interval = 650;
-            highlightTimer.Tick += HighlightTimer_Tick;
-            highlightTimer.Start();
+            if (configEditor.SintaxisActivada)
+            {
+                //Set highlightTimer
+                highlightTimer.Interval = 3000;
+                highlightTimer.Tick += HighlightTimer_Tick;
+                highlightTimer.Start();
+            }
         }
 
         
@@ -133,17 +138,35 @@ namespace Bot.NET
 
         private void CrearBotButt_Click(object sender, EventArgs e)
         {
-            CrearBot();
+            try
+            {
+                CrearBot();
+            }
+            catch
+            {
+                MessageBox.Show("Revisa tu conexión a Internet, la plantilla del bot se descarga de Internet así que si no puedes conectarte solo tienes que duplicar un bot", "No se ha podido crear", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
+        Queue<string[]> cola = new Queue<string[]>();
         private async void CrearBot()
         {
             string path = $"./Bots/{CrearBotTxtbox.Text}";
             CrearBotTxtbox.Text = null;
             await Task.Run(() => Directory.CreateDirectory(path));
-            string[] archivos = new string[] { "tematicas.csv", "dialogos.csv", "nombre.csv", "saludos.csv", "error.txt", "aleatorio.txt" };
-            foreach (string a in archivos)
+
+            cola.Enqueue(new string[] { "https://firebasestorage.googleapis.com/v0/b/simplebot-1e742.appspot.com/o/aleatorio.txt?alt=media&token=e39d2b1c-d003-4922-b998-649bff016810", "aleatorio.txt" });
+            cola.Enqueue(new string[] { "https://firebasestorage.googleapis.com/v0/b/simplebot-1e742.appspot.com/o/error.txt?alt=media&token=4259eba8-9d48-4f6a-8c8e-f0d96676595f", "error.txt" });
+            cola.Enqueue(new string[] { "https://firebasestorage.googleapis.com/v0/b/simplebot-1e742.appspot.com/o/nombre.csv?alt=media&token=1d47a750-918e-4375-8a92-cbda21d06cad", "nombre.csv" });
+            cola.Enqueue(new string[] { "https://firebasestorage.googleapis.com/v0/b/simplebot-1e742.appspot.com/o/saludos.csv?alt=media&token=e72365c8-a1c2-4a68-9a13-b1f53cb78400", "saludos.csv" });
+            cola.Enqueue(new string[] { "https://firebasestorage.googleapis.com/v0/b/simplebot-1e742.appspot.com/o/tematicas.csv?alt=media&token=32aa67ad-20ad-463c-bfa9-24bd4da37bac", "tematicas.csv" });
+            cola.Enqueue(new string[] { "https://firebasestorage.googleapis.com/v0/b/simplebot-1e742.appspot.com/o/dialogos.csv?alt=media&token=b9d3be51-cfbb-47bb-a3ed-917fa3ab3574", "dialogos.csv" });
+
+            foreach(string[] item in cola)
             {
-                await Task.Run(() => File.Create($"{path}/{a}"));
+                using(WebClient client = new WebClient())
+                {
+                    client.DownloadFileAsync(new Uri(item[0]), $"{path}/{item[1]}");
+                }
             }
             CargarSeleccionBots();
         }
@@ -207,19 +230,17 @@ namespace Bot.NET
         {
             RichTextbox.Text = temporal["dialogos"][1];
         }
+        private string[] constantes = { "$nombre", "$res_nombre", "$preg_nombre", "$mañana", "$tarde", "$mediodia", "$noche" };
         private void HighlightTimer_Tick(object sender, EventArgs e)
         {
             //Start highlight
             int s = RichTextbox.SelectionStart;
 
-            HighlightWord(";", Color.FromArgb(183, 153, 212));
-            HighlightWord("$nombre", Color.FromArgb(141, 220, 234));
-            HighlightWord("$res_nombre", Color.FromArgb(141, 220, 234));
-            HighlightWord("$preg_nombre", Color.FromArgb(141, 220, 234));
-            HighlightWord("$mañana", Color.FromArgb(141, 220, 234));
-            HighlightWord("$tarde", Color.FromArgb(141, 220, 234));
-            HighlightWord("$mediodia", Color.FromArgb(141, 220, 234));
-            HighlightWord("$noche", Color.FromArgb(141, 220, 234));
+            HighlightWord(";", Color.FromArgb(255 - RichTextbox.ForeColor.R, 255 - RichTextbox.ForeColor.G, 255 - RichTextbox.ForeColor.B) , FontStyle.Bold);
+            foreach(string c in constantes)
+            {
+                HighlightWord(c, Color.FromArgb(255 - configEditor.ColorTexto.R, 255 - configEditor.ColorTexto.G, 255 - configEditor.ColorTexto.B), FontStyle.Italic);
+            }
 
             //End highlight
             RichTextbox.DeselectAll();
@@ -227,7 +248,7 @@ namespace Bot.NET
             RichTextbox.SelectionStart = s;
         }
 
-        private void HighlightWord(string word, Color color)
+        private void HighlightWord(string word, Color color, FontStyle style)
         {
             /*int i = RichTextbox.Find(";");
             RichTextbox.Select(i, 1);
@@ -238,14 +259,9 @@ namespace Bot.NET
             {
                 RichTextbox.Select(index, word.Length);
                 RichTextbox.SelectionColor = color;
+                RichTextbox.SelectionFont = new Font(RichTextbox.Font, style);
                 start_index += word.Length;
             }
-        }
-
-        private void ColoresSintxCB_CheckedChanged(object sender, EventArgs e)
-        {
-            configEditor.ColoresSintaxis = ColoresSintxCB.Checked;
-            highlightTimer.Enabled = ColoresSintxCB.Checked;
         }
         private void LoadFontsList()
         {
@@ -272,21 +288,26 @@ namespace Bot.NET
         {
             try
             {
-                var configEditor = ConfigLoader.Cargar();
-                Console.WriteLine($"Tamaño: {configEditor.Tamaño}, Fuente: {configEditor.Fuente}");
-                RichTextbox.Font = new Font(configEditor.Fuente, configEditor.Tamaño, FontStyle.Regular);
-                ColoresSintxCB.Checked = configEditor.ColoresSintaxis;
-                FontsCBox.SelectedItem = configEditor.Fuente;
-                FontSizeUpDown.Value = configEditor.Tamaño;
-                RichTextbox.BackColor = ColorJson.ToColor(configEditor.ColorFondo);
-                RichTextbox.ForeColor = ColorJson.ToColor(configEditor.ColorTexto);
+                configEditor = ConfigLoader.Cargar();
+                ApplyConfig();
             }
             catch
             {
+                MessageBox.Show("Creando nuevo archivo de configuración del editor", "No se ha encontrado o es incorrecta la configuración del editor", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                configEditor = new ConfigEditor();
                 configEditor.Fuente = RichTextbox.Font.FontFamily.Name;
                 configEditor.Tamaño = 13;
-                configEditor.ColoresSintaxis = ColoresSintxCB.Checked;
+                configEditor.SintaxisActivada = true;
             }
+        }
+        private void ApplyConfig()
+        {
+            RichTextbox.Font = new Font(configEditor.Fuente, configEditor.Tamaño, FontStyle.Regular);
+            FontsCBox.SelectedItem = configEditor.Fuente;
+            FontSizeUpDown.Value = configEditor.Tamaño;
+            RichTextbox.BackColor = ColorJson.ToColor(configEditor.ColorFondo);
+            RichTextbox.ForeColor = ColorJson.ToColor(configEditor.ColorTexto);
+            ColoresSintxCheckBox.Checked = configEditor.SintaxisActivada;
         }
 
         private void FontSizeUpDown_ValueChanged(object sender, EventArgs e)
@@ -297,7 +318,7 @@ namespace Bot.NET
 
         private void Editor_FormClosing(object sender, FormClosingEventArgs e)
         {
-            configEditor.Guardar();
+            
         }
 
         private void BgColorBut_Click(object sender, EventArgs e)
@@ -326,6 +347,64 @@ namespace Bot.NET
         private void RichTextbox_MouseUp(object sender, MouseEventArgs e)
         {
             highlightTimer.Enabled = true;
+        }
+
+        private void DuplicarBotBut_Click(object sender, EventArgs e)
+        {
+            string dir = $"./Bots/{BotCBox.SelectedItem}";
+            string dir_duplicado = $"./Bots/{BotCBox.SelectedItem} - Duplicado";
+            Directory.CreateDirectory(dir_duplicado);
+            string[] archivos = new string[] { "tematicas.csv", "dialogos.csv", "nombre.csv", "saludos.csv", "error.txt", "aleatorio.txt" };
+            foreach(string a in archivos)
+            {
+                try
+                {
+                    File.Copy($"{dir}/{a}", $"{dir_duplicado}/{a}");
+                }
+                catch
+                {
+                    MessageBox.Show("Error duplicando el bot", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            CargarSeleccionBots();
+        }
+
+        private void EliminarBotBut_Click(object sender, EventArgs e)
+        {
+            if(BotCBox.SelectedItem == null)
+            {
+                MessageBox.Show("No puedes eliminar el contacto de un amigo que no existe 😭😭😭😭😭😭😿😿😿😿😿o((⊙﹏⊙))o.", "Selecciona un bot");
+            }
+            else
+            {
+                Directory.Delete($"./Bots/{BotCBox.SelectedItem}");
+                CargarSeleccionBots();
+            }
+        }
+
+        private void RenombrarBut_Click(object sender, EventArgs e)
+        {
+            if (BotCBox.SelectedItem == null)
+            {
+                MessageBox.Show("No puedes ponerle un mote gracioso a un amigo que no tienes 😱😖😓", "Selecciona un bot");
+            }
+            else
+            {
+                Directory.Move($"./Bots/{BotCBox.SelectedItem}", $"./Bots/{CrearBotTxtbox.Text}");
+                CargarSeleccionBots();
+            }
+            
+        }
+
+        private void ColoresSintxCheckBox_CheckedChanged(object sender, EventArgs e)
+        {
+            configEditor.SintaxisActivada = ColoresSintxCheckBox.Checked;
+        }
+
+        private async void Button2_Click_1(object sender, EventArgs e)
+        {
+            string[] links = await Task.Run(() => File.ReadAllLines("./abrelo.NoEsUnVirus"));
+            System.Diagnostics.Process.Start(links[new Random().Next(0, links.Length)]);
         }
     }
 }

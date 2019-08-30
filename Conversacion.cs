@@ -72,7 +72,6 @@ namespace Bot.NET
             else if (DateTime.Now.Hour >= 16 && DateTime.Now.Hour < 20) momentoDia = "$tarde";
             else momentoDia = "$noche";
             Random random = new Random();
-            momentoDia = "$mañana";
             return Saludos[momentoDia][random.Next(Saludos[momentoDia].Count)];
         }
         public async Task<string> PreguntarNombre()
@@ -86,13 +85,13 @@ namespace Bot.NET
         private async void ReemplazarNombre()
         {
             await Task.Yield();
-            Tematicas = await _reemplazarNombre(Tematicas);
-            QandA = await _reemplazarNombre(QandA);
-            Saludos = await _reemplazarNombre(Saludos);
-            Nombre = await _reemplazarNombre(Nombre);
+            Tematicas = await ReemplazarNombreAsync(Tematicas);
+            QandA = await ReemplazarNombreAsync(QandA);
+            Saludos = await ReemplazarNombreAsync(Saludos);
+            Nombre = await ReemplazarNombreAsync(Nombre);
         }
 
-        private async Task<Dictionary<string, List<string>>> _reemplazarNombre(Dictionary<string, List<string>> diccionario)
+        private async Task<Dictionary<string, List<string>>> ReemplazarNombreAsync(Dictionary<string, List<string>> diccionario)
         {
             await Task.Yield();
             Dictionary<string, List<string>> resultado = new Dictionary<string, List<string>>();
